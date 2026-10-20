@@ -13,10 +13,11 @@ images, into fixed-point C header files, and checks the quantized model against 
 | `gen_weights.py` | Exports the model's quantized weights as `.h` files. |
 | `gen_dataset.py` | Exports quantized ImageNetV2 images as `.h` files. |
 | `validate.py` | Runs the integer (quantized) model against the float one on ImageNetV2 and checks for int32 overflow. |
+| `gen_slices.py` | Exports the quantized conv weights split per PE, along C_in, for a multi-PE AlexNet. |
 
 There is no fused model: AlexNet has no BatchNorm layers to fuse.
 
-Generated artifacts (`weights/`, `dataset-quant/`, `autodl-tmp/`) are gitignored — they're all
+Generated artifacts (`weights/`, `dataset-quant/`, `slices/`, `autodl-tmp/`) are gitignored — they're all
 reproducible from the scripts above. The pretrained weights are downloaded by torchvision into
 `~/.cache/torch` on first use.
 
@@ -48,14 +49,16 @@ weights ×8192, biases ×256.
 **3. Export quantized test images as C headers:**
 
 ```sh
-python gen_dataset.py [--num-images 10] [--output-dir ./dataset-quant]
+python gen_dataset.py [--num-images 10] [--output-dir ./dataset-quant] [--split-channels N]
 ```
 
 Writes `image1.h` .. `imageN.h`, each holding a normalized, fixed-point `int32` (×256)
 ImageNetV2 image in PyTorch's CHW layout, preprocessed as AlexNet expects (resize 256,
 center-crop 224, ImageNet mean/std). The images are evenly spaced over the dataset, so they
 come from different classes. Each header comments the true class and the float model's
-predicted class (index + name) for that image.
+predicted class (index + name) for that image. `--split-channels N` also writes each image
+as `N` contiguous blocks of channels, `imageK_c0.h` .. `imageK_c<N-1>.h`: one per conv1 PE
+when conv1 is split along C_in (see `gen_slices.py`).
 
 **4. Validate the quantized model:**
 
@@ -66,6 +69,19 @@ python validate.py [--num-images 10000] [--batch-size 50] [--workers 8]
 Runs the integer model and the float model on the same images and reports the top-1
 agreement between them, the top-1/top-5 accuracy of both, and the int32 headroom of each
 layer on the worst image. It exits with 1 if any int32 accumulator can overflow.
+
+**5. Split the weights per PE** (multi-PE AlexNet, each conv layer split along C_in):
+
+```sh
+python gen_slices.py [--pes 3,8,4,6,4] [--output-dir ./slices]
+```
+
+`--pes` is the number of PEs of conv1..conv5. PE `i` of conv layer `L` gets a contiguous block
+of `C_in/n` input channels of every output channel, written to `cL_i_weight.h` as
+`[C_out][C_in/n][K][K]` (OIHW with a smaller I). The conv biases are written whole to
+`biasL.h`, for the join that adds up the PEs' partial sums. The quantization is
+`gen_weights.py`'s, so the values are the same as in its `oihw` headers. The conv1 input is
+split with `gen_dataset.py --split-channels`.
 
 ## Quantization scheme
 

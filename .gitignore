@@ -5,3 +5,5 @@ autodl-tmp/
 
 weights/
 dataset-quant/
+
+slices/

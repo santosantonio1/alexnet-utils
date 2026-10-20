@@ -14,6 +14,7 @@ OUTPUT_DIR = './dataset-quant'
 # 2^8, not 8192: with weights at 2^13, images at 8192 overflow the int32 accumulators.
 # Biases are at this scale too (see gen_weights.py)
 QUANTIZATION_SCALE = 256
+IMAGE_CHANNELS = 3
 
 CLASSES = models.AlexNet_Weights.DEFAULT.meta['categories']
 
@@ -54,7 +55,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Generate quantized ImageNetV2 images as .h files')
     parser.add_argument('--num-images', type=int, default=10, help='number of images to generate')
     parser.add_argument('--output-dir', default=OUTPUT_DIR, help='directory to write .h files to')
+    parser.add_argument('--split-channels', type=int, default=0, metavar='N',
+                        help='also write each image as N blocks of channels (imageK_c0.h ..), one per conv1 PE')
     args = parser.parse_args()
+
+    if args.split_channels and IMAGE_CHANNELS % args.split_channels:
+        raise SystemExit(f'--split-channels: {IMAGE_CHANNELS} channels do not split into {args.split_channels} blocks')
 
     dataset = torchvision.datasets.ImageFolder(DATA_PATH, transform=transform)
     # the dataset is sorted by class: evenly spaced picks cover different classes
@@ -73,4 +79,10 @@ if __name__ == '__main__':
         predictions = predictions.tolist()
 
     for n, (img, label, prediction, score) in enumerate(zip(imgs, labels, predictions, scores), start=1):
-        generate_header(f'image{n}', quantize(img), label, prediction, score, root=args.output_dir)
+        values = quantize(img)
+        generate_header(f'image{n}', values, label, prediction, score, root=args.output_dir)
+
+        if args.split_channels:
+            # CHW: a block of channels is a contiguous slice
+            for c, block in enumerate(np.split(values, args.split_channels)):
+                generate_header(f'image{n}_c{c}', block, label, prediction, score, root=args.output_dir)
