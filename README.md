@@ -13,7 +13,7 @@ images, into fixed-point C header files, and checks the quantized model against 
 | `gen_weights.py` | Exports the model's quantized weights as `.h` files. |
 | `gen_dataset.py` | Exports quantized ImageNetV2 images as `.h` files. |
 | `validate.py` | Runs the integer (quantized) model against the float one on ImageNetV2 and checks for int32 overflow. |
-| `gen_slices.py` | Exports the quantized conv weights split per PE, along C_in, for a multi-PE AlexNet. |
+| `gen_slices.py` | Exports the quantized conv weights split per PE, along C_in, plus the whole fc weights, for a multi-PE AlexNet. |
 
 There is no fused model: AlexNet has no BatchNorm layers to fuse.
 
@@ -81,7 +81,8 @@ of `C_in/n` input channels of every output channel, written to `cL_i_weight.h` a
 `[C_out][C_in/n][K][K]` (OIHW with a smaller I). The conv biases are written whole to
 `biasL.h`, for the join that adds up the PEs' partial sums. The quantization is
 `gen_weights.py`'s, so the values are the same as in its `oihw` headers. The conv1 input is
-split with `gen_dataset.py --split-channels`.
+split with `gen_dataset.py --split-channels`. The fc layers are not split: their weights and
+biases are written whole to `fcL_weight.h`/`fcL_bias.h` (`L` = 6, 7, 8).
 
 ## Quantization scheme
 

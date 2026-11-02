@@ -8,12 +8,16 @@ from gen_weights import quantize, generate_header, QUANTIZATION_SCALE, BIAS_SCAL
 # output channel, so its weights keep the OIHW order with a smaller I: [C_out][C_in/n][K][K].
 # Biases are only needed by the join that adds up the PEs' partial sums, so they are whole.
 # The conv1 input is split the same way by gen_dataset.py --split-channels.
+# The fc layers run unsplit on a single PE, so their weights and biases are written whole.
 
 OUTPUT_DIR = './slices'
 
 # conv layer: features index in the state_dict
 CONV_LAYERS = {1: 0, 2: 3, 3: 6, 4: 8, 5: 10}
 DEFAULT_PES = '3,8,4,6,4'
+
+# fc layer: classifier index in the state_dict
+FC_LAYERS = {6: 1, 7: 4, 8: 6}
 
 
 if __name__ == '__main__':
@@ -43,3 +47,10 @@ if __name__ == '__main__':
             generate_header(f'c{layer}_{pe}_weight', w[:, pe*d:(pe + 1)*d], root=args.output_dir)
 
         generate_header(f'bias{layer}', b, root=args.output_dir)
+
+    for layer, cls in FC_LAYERS.items():
+        w = quantize(state[f'classifier.{cls}.weight'], QUANTIZATION_SCALE)  # [C_out][C_in]
+        b = quantize(state[f'classifier.{cls}.bias'], BIAS_SCALE)
+
+        generate_header(f'fc{layer}_weight', w, root=args.output_dir)
+        generate_header(f'fc{layer}_bias', b, root=args.output_dir)
