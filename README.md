@@ -56,8 +56,8 @@ Writes `image1.h` .. `imageN.h`, each holding a normalized, fixed-point `int32` 
 ImageNetV2 image in PyTorch's CHW layout, preprocessed as AlexNet expects (resize 256,
 center-crop 224, ImageNet mean/std). The images are evenly spaced over the dataset, so they
 come from different classes. Each header comments the true class and the float model's
-predicted class (index + name) for that image. `--split-channels N` also writes each image
-as `N` contiguous blocks of channels, `imageK_c0.h` .. `imageK_c<N-1>.h`: one per conv1 PE
+predicted class (index + name) for that image. `--split-channels N` writes each image as `N`
+contiguous blocks of channels instead, `imageK_c0.h` .. `imageK_c<N-1>.h`: one per conv1 PE
 when conv1 is split along C_in (see `gen_slices.py`).
 
 **4. Validate the quantized model:**
